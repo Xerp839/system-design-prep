@@ -16,7 +16,7 @@ class Movie:
 
         if num_tickets <= avail_tickets:
             self.booked_seat += num_tickets
-            self.total_seat -= num_tickets
+            # self.total_seat -= num_tickets
             bill = self.ticket_price * num_tickets
             print(f"Your Tickets Are confirmed, Bill:{bill}")
         else:
