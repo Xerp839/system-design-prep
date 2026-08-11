@@ -20,7 +20,10 @@ class Dog(Animal):
 
     def display(self) -> None:
         print(f"My name is {self.name}, age is {self.age}")
+    
+    def sleep(self) -> None:
+        print("Sleeping like a dawg")
 
 
 dog = Dog("Doggie", 14, "german shepard")
-dog.display()
+dog.sleep()
