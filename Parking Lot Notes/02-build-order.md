@@ -35,8 +35,8 @@ HORIZONTAL (bad)                     VERTICAL (good)
 domain   ████████████               domain   ████████████    <- one horizontal pass, it's cheap
 repo     ████████████               repo     ██  ██  ████
 service  ████████████               service  ██  ██  ████
-ctrl     ████████████               ctrl     ██  ██  ████
-         ^ nothing works                     ENTRY EXIT ADMIN
+ctrl     ████████████               ctrl     ██    ██
+         ^ nothing works                     ENTRY EXIT
            until the end                     ^each column runs on its own
 ```
 
@@ -44,9 +44,12 @@ Domain is the exception — it's 7 tiny classes, it anchors all your vocabulary,
 Do it in one pass. Everything above domain, you build **one flow at a time, top to bottom,
 and you run it before starting the next flow.**
 
-Order of flows: **Entry → Exit → Admin.** Entry is the smallest complete story. Exit is the
-one with the interesting logic. Admin is mostly setup and is the first thing you drop if time
-runs out.
+Order of flows: **Entry → Exit.** Entry is the smallest complete story; exit has the
+interesting logic. There is no third flow — see Pass 7 on why admin is something you
+*describe*, never type.
+
+**The budget:** a realistic 45-minute answer is ~400 lines. `Parking Lot Design/` is 421.
+If your plan implies much more than that, cut scope now, not at minute 40.
 
 ---
 
@@ -71,8 +74,8 @@ Then write the scope box on the board and **freeze it**:
 ```
 IN:   entry -> assign slot, issue ticket
       exit  -> compute fee, take payment, receipt, free slot
-      admin -> add floor/slot, update pricing, view status
 OUT:  reservations, passes, ANPR, multi-lot, auth
+      admin CRUD (seeded in main; I'll describe it, not build it)
 ```
 
 > This box is your defence for the rest of the hour. When you're at minute 40 and the
@@ -94,23 +97,30 @@ Vehicle  ParkingSlot  Floor  Ticket  PricingRule  Payment  Receipt
 For each, write attributes only — **no methods yet**:
 
 ```
-Vehicle      id, licensePlate, vehicleType(enum)
+Vehicle      licensePlate, vehicleType(enum)        <- plate is the identity
 ParkingSlot  id, slotType(enum), occupied(bool), floorNumber
-Floor        id, floorNumber, slots[]
-Ticket       id, vehicleId, slotId, entryTime, active(bool)
-PricingRule  id, vehicleType, ratePerHour, flatRate
+Floor        floorNumber, slots[]                   <- owns its slots
+Ticket       id, licensePlate, vehicleType, slotId, entryTime, active(bool)
+PricingRule  vehicleType, ratePerHour, flatRate
 Payment      id, ticketId, amount, gateway(enum), status(enum)
 Receipt      id, ticketId, exitTime, totalFee, paymentStatus(enum)
 ```
 
-Two rules I want you to apply here every single time:
+Three rules I want you to apply here every single time:
 
 1. **Every type-ish field becomes an enum.** `vehicleType`, `status`, `gateway`.
-2. **Every "points at another thing" field becomes an `id`, not an object.** Why: it keeps
-   your object graph flat and matches what a DB row looks like. **But the moment you do
-   this, ask "will I need to look that thing up later?"** — if yes, you owe yourself a
-   repository. (This is precisely the mistake in the copied code: `Ticket.vehicleId` exists
-   but `VehicleRepository` doesn't, so pricing can't find the vehicle type.)
+2. **Don't invent an id when a natural key exists.** A license plate is already unique —
+   giving `Vehicle` a UUID beside it means maintaining two identities for one car.
+3. **Every "points at another thing" field becomes an `id`, not an object** — it keeps the
+   object graph flat and matches a DB row. **But the moment you do this, ask "will I need to
+   look that thing up later?"** If yes, you owe yourself either a repository to resolve it or
+   a copy of the field you need.
+
+Rule 3 is where the original version broke: `Ticket` held a `vehicleId`, no `VehicleRepository`
+existed, so `PricingService` gave up and hardcoded `CAR` — every bike billed at car rates.
+The fix here is the *copy* branch: `Ticket` carries `vehicleType` directly, which is also
+more correct, because a ticket should record what was agreed at entry and not change if the
+vehicle record is edited later.
 
 ### PASS 3 — Domain (WRITE, ~6 min)
 
@@ -118,14 +128,17 @@ Now type. `__init__` plus enums plus `__str__`. That's it.
 
 ```python
 # domain/vehicle.py
+class VehicleType(Enum):                     # module level, not nested
+    BIKE = "BIKE"; CAR = "CAR"; TRUCK = "TRUCK"; EV = "EV"
+
 class Vehicle:
-    class VehicleType(Enum):
-        BIKE = "BIKE"; CAR = "CAR"; TRUCK = "TRUCK"; EV = "EV"
     def __init__(self, license_plate, vehicle_type):
-        self.id = str(uuid.uuid4())
-        self.license_plate = license_plate
+        self.license_plate = license_plate   # the plate IS the identity — no uuid
         self.vehicle_type = vehicle_type
 ```
+
+Use readable ids where you do need one — `itertools.count` giving `T-1`, `S-F0-011`, `R-1`.
+Your demo output has to be legible to the person watching you.
 
 Add a domain method **only when it's a one-liner about the object's own state**:
 `ticket.deactivate()`, `payment.mark_as_success()`, `floor.add_slot(s)`.
@@ -175,12 +188,13 @@ Write the method list before you write the methods:
 ```
 TicketService   generate_ticket(vehicle, slot_id) -> Ticket
                 get_ticket(id) -> Ticket | None
-                deactivate_ticket(id)
-SlotService     allocate_slot(type) -> Slot | None
+                close_ticket(ticket)
+SlotService     allocate_slot(type) -> Slot | None      # policy lives here
                 release_slot(slot_id)
-PricingService  calculate_fee(ticket) -> float
-PaymentService  process_payment_with_retry(ticket_id, amount, n) -> bool
-ReceiptService  generate_receipt(ticket, fee) -> Receipt
+                availability(type) -> {floor: count}
+PricingService  calculate_fee(ticket, now=None) -> float
+PaymentService  process_payment(ticket_id, amount, max_attempts=3) -> bool
+ReceiptService  issue_receipt(ticket, fee) -> Receipt
 ```
 
 Every signature comes straight off the ladder. **You now have nothing left to think about
@@ -190,40 +204,62 @@ while typing** — which is the entire point of the plan/write rhythm.
 
 Write *only* what the entry ladder needs, bottom to top:
 
-1. `SlotRepository` — `save`, `find_by_id`, `find_available_slots`, `allocate_slot`
+1. `FloorRepository` — `save`, `find_all`, `find_slot` (the id → slot index)
 2. `TicketRepository` — `save`, `find_by_id`
-3. `SlotService.allocate_slot`, `TicketService.generate_ticket`
+3. `SlotService.allocate_slot` (walks floors, picks, calls `slot.occupy()`),
+   `TicketService.generate_ticket`
 4. `EntryResult` + `EntryController.enter_vehicle`
-5. A tiny `main` that wires the two repos, two services, one controller, hand-creates
-   three slots, and parks a car.
+5. A tiny `main` that wires two repos, two services and one controller, seeds one floor
+   with a few slots, and parks a car.
 
-**Run it.** Print the ticket id. You now have a working feature at minute ~25.
+**Run it.** Print the ticket id and the per-floor availability before and after. You now
+have a working, *visible* feature at minute ~25.
 
-Do NOT write `PaymentRepository` yet. Do NOT write `Floor` handling yet. Resist.
+Do NOT write payments yet. Do NOT write receipts yet. Resist.
 
 ### PASS 6 — Vertical slice 2: EXIT (WRITE, ~10 min)
 
 Now the same thing for exit:
 
-1. `PricingRuleRepository`, `PaymentRepository`
+1. `PricingRuleRepository`, `PaymentRepository`, `ReceiptRepository`
 2. `PaymentGatewayAdapter` (ABC) + one fake implementation returning `True`
-3. `PricingService.calculate_fee`, `PaymentService.process_payment_with_retry`,
-   `ReceiptService.generate_receipt`
+3. `PricingService.calculate_fee`, `PaymentService.process_payment`,
+   `ReceiptService.issue_receipt`
 4. `ExitResult` + `ExitController.exit_vehicle`
 5. Extend `main`: park a car, exit it, print the fee.
 
 **Run it again.** At minute ~40 you have both core flows working end to end.
 
-### PASS 7 — Admin + extensions (WRITE or just TALK, remaining time)
+### PASS 7 — Talk, don't type (remaining time)
 
-`FloorRepository`, `AdminService.add_floor / add_slot / update_pricing`, `AdminController`.
-This is CRUD, it's boring, and it's the right thing to sacrifice.
+**Do not write an admin layer.** This is the single biggest time trap in this problem.
 
-If you're short on time, **say** it rather than typing it:
-*"Admin is straightforward CRUD over FloorRepository and PricingRuleRepository — I'd rather
-spend the remaining time on how I'd handle concurrent entry at two gates. Shall I?"*
+The version you're learning from originally had one — `AdminService` + `AdminController` +
+an extra repository, **108 lines** — and all it did was create three floors and set four
+prices. In `main.py` that is now a dict and a loop:
 
-That sentence reads as senior. Silently running out of time does not.
+```python
+LAYOUT = {0: [(VehicleType.BIKE, 10), (VehicleType.CAR, 15), (VehicleType.TRUCK, 3)],
+          1: [(VehicleType.CAR, 20), (VehicleType.EV, 5)]}
+```
+
+Admin is CRUD. CRUD demonstrates nothing about your design ability, and 108 lines is a
+quarter of your time budget. Say this instead:
+
+> *"Admin is CRUD over the floor and pricing repositories — add floor, add slots, update a
+> rule. I've seeded it in `main` instead so I can spend the time on how I'd handle two gates
+> racing for the last slot. Shall I?"*
+
+That reads as senior: you named the work, judged its value, and offered something better.
+Silently running out of time does not.
+
+Spend the remaining minutes on whichever of these they bite on — each is in the curveball
+list at the end of this file:
+
+- concurrency on slot allocation (your strongest card)
+- pricing as a Strategy when rules multiply
+- slot-type compatibility (a car in a truck slot)
+- O(1) slot lookup at 10,000 slots
 
 ---
 
@@ -237,7 +273,7 @@ That sentence reads as senior. Silently running out of time does not.
 | 4 | PLAN | numbered flow ladders → services + repos + signatures | 4 |
 | 5 | WRITE | ENTRY slice, repo→service→controller→main, **run it** | 8 |
 | 6 | WRITE | EXIT slice, **run it** | 10 |
-| 7 | WRITE/TALK | admin, edge cases, extensions | rest |
+| 7 | TALK | admin (describe, don't type), concurrency, extensions | rest |
 
 Two rules that hold the whole thing together:
 

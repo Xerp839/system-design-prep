@@ -1,69 +1,104 @@
+"""
+Parking lot - wiring and a runnable demo.
+
+This file is the only place that knows concrete classes. Everything else receives its
+dependencies through its constructor, so any piece can be swapped or faked in tests.
+
+Run:  python main.py
+"""
+
 import sys
 
-# Windows consoles default to cp1252, which cannot encode the emoji used below.
-sys.stdout.reconfigure(encoding="utf-8")
-
-from domain.vehicle import Vehicle
+from adapter.payment_gateway import RazorpayAdapter, StripeAdapter
+from controller.entry_controller import EntryController
+from controller.exit_controller import ExitController
+from domain.floor import Floor
+from domain.payment import PaymentGateway
+from domain.pricing_rule import PricingRule
+from domain.vehicle import VehicleType
 from repository.floor_repository import FloorRepository
-from repository.slot_repository import SlotRepository
-from repository.ticket_repository import TicketRepository
 from repository.payment_repository import PaymentRepository
 from repository.pricing_rule_repository import PricingRuleRepository
-from service.admin_service import AdminService
+from repository.receipt_repository import ReceiptRepository
+from repository.ticket_repository import TicketRepository
 from service.payment_service import PaymentService
 from service.pricing_service import PricingService
 from service.receipt_service import ReceiptService
 from service.slot_service import SlotService
 from service.ticket_service import TicketService
-from controller.admin_controller import AdminController
-from controller.entry_controller import EntryController
-from controller.exit_controller import ExitController
+
+LAYOUT = {
+    0: [(VehicleType.BIKE, 10), (VehicleType.CAR, 15), (VehicleType.TRUCK, 3)],
+    1: [(VehicleType.CAR, 20), (VehicleType.EV, 5)],
+}
+
+PRICES = [
+    PricingRule(VehicleType.BIKE, rate_per_hour=10.0, flat_rate=30.0),
+    PricingRule(VehicleType.CAR, rate_per_hour=20.0, flat_rate=60.0),
+    PricingRule(VehicleType.TRUCK, rate_per_hour=30.0, flat_rate=90.0),
+    PricingRule(VehicleType.EV, rate_per_hour=15.0, flat_rate=45.0),
+]
+
+
+def build_lot():
+    """Wire everything up and seed the lot. Returns the two controllers."""
+    floor_repo = FloorRepository()
+    ticket_repo = TicketRepository()
+    pricing_repo = PricingRuleRepository()
+    payment_repo = PaymentRepository()
+    receipt_repo = ReceiptRepository()
+
+    # Seed: in a real system an admin screen does this. It is plain setup, not design,
+    # so it lives here rather than in an admin service.
+    for floor_number, spec in LAYOUT.items():
+        floor = Floor(floor_number)
+        for slot_type, count in spec:
+            floor.add_slots(slot_type, count)
+        floor_repo.save(floor)
+    for rule in PRICES:
+        pricing_repo.save(rule)
+
+    slot_service = SlotService(floor_repo)
+    ticket_service = TicketService(ticket_repo)
+    pricing_service = PricingService(pricing_repo)
+    receipt_service = ReceiptService(receipt_repo)
+    payment_service = PaymentService(
+        payment_repo,
+        gateways=[
+            (PaymentGateway.RAZORPAY, RazorpayAdapter()),
+            (PaymentGateway.STRIPE, StripeAdapter()),
+        ],
+    )
+
+    entry = EntryController(slot_service, ticket_service)
+    exit_ = ExitController(
+        ticket_service, pricing_service, payment_service, receipt_service, slot_service
+    )
+    return entry, exit_, slot_service
+
 
 def main():
-    print("=== PARKING LOT LLD SIMULATION (PYTHON) ===")
-    
-    # 1. Initialize Repositories
-    floor_repo = FloorRepository()
-    slot_repo = SlotRepository()
-    ticket_repo = TicketRepository()
-    payment_repo = PaymentRepository()
-    pricing_repo = PricingRuleRepository()
-    
-    # 2. Initialize Services
-    admin_service = AdminService(floor_repo, slot_repo, pricing_repo)
-    payment_service = PaymentService(payment_repo)
-    pricing_service = PricingService(pricing_repo)
-    receipt_service = ReceiptService()
-    slot_service = SlotService(slot_repo)
-    ticket_service = TicketService(ticket_repo)
-    
-    # 3. Initialize Controllers
-    admin_controller = AdminController(admin_service)
-    entry_controller = EntryController(ticket_service, slot_service)
-    exit_controller = ExitController(ticket_service, pricing_service, payment_service, receipt_service, slot_service)
-    
-    # 4. Initial Setup
-    print("\n=== INITIALIZATION PHASE ===")
-    admin_controller.initialize_parking_lot()
-    
-    # 5. Simulate Vehicle Entry
-    print("\n=== ENTRY FLOW SIMULATION ===")
-    res1 = entry_controller.enter_vehicle("ABC-123", Vehicle.VehicleType.CAR)
-    if res1.success:
-        print(f"✅ Entry successful - Ticket: {res1.ticket_id}")
-        
-    res2 = entry_controller.enter_vehicle("XYZ-789", Vehicle.VehicleType.BIKE)
-    if res2.success:
-        print(f"✅ Entry successful - Ticket: {res2.ticket_id}")
-        
-    # 6. Simulate Vehicle Exit
-    print("\n=== EXIT FLOW SIMULATION ===")
-    exit_res = exit_controller.exit_vehicle(res1.ticket_id)
-    if exit_res.success:
-        print(f"✅ Exit successful - Fee: ${exit_res.fee:.2f}")
-        print(exit_controller.generate_receipt_text(res1.ticket_id))
-        
-    print("\n=== SIMULATION COMPLETED ===")
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252
+    entry, exit_, slots = build_lot()
+
+    print("=== PARKING LOT ===")
+    print("CAR availability per floor:", slots.availability(VehicleType.CAR))
+
+    print("\n-- entry --")
+    car = entry.enter_vehicle("KA-01-1234", VehicleType.CAR)
+    bike = entry.enter_vehicle("KA-02-9999", VehicleType.BIKE)
+    for r in (car, bike):
+        print(f"  {r.message}: ticket={r.ticket_id} slot={r.slot_id}")
+    print("CAR availability per floor:", slots.availability(VehicleType.CAR))
+
+    print("\n-- exit --")
+    result = exit_.exit_vehicle(car.ticket_id)
+    print(f"  {result.message}: fee={result.fee:.2f} receipt={result.receipt_id}")
+    print("CAR availability per floor:", slots.availability(VehicleType.CAR))
+
+    print("\n-- same ticket again --")
+    print(" ", exit_.exit_vehicle(car.ticket_id).message)
+
 
 if __name__ == "__main__":
     main()

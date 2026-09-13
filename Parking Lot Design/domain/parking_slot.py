@@ -1,17 +1,26 @@
-import uuid
-from .vehicle import Vehicle
+from .vehicle import VehicleType
+
 
 class ParkingSlot:
-    """
-    ParkingSlot Domain Model
-    
-    Represents a single parking slot on a specific floor.
-    """
-    def __init__(self, slot_type: Vehicle.VehicleType, floor_number: int):
-        self.id = str(uuid.uuid4())
+    """One slot on one floor. `occupied` is the only state that changes."""
+
+    def __init__(self, slot_id: str, slot_type: VehicleType, floor_number: int):
+        self.id = slot_id
         self.slot_type = slot_type
-        self.occupied = False
         self.floor_number = floor_number
+        self.occupied = False
+
+    def occupy(self):
+        # Guarded so a double-book is a loud error instead of a silent overwrite.
+        if self.occupied:
+            raise ValueError(f"Slot {self.id} is already occupied")
+        self.occupied = True
+
+    def release(self):
+        if not self.occupied:
+            raise ValueError(f"Slot {self.id} is already free")
+        self.occupied = False
 
     def __str__(self):
-        return f"ParkingSlot(id={self.id}, type={self.slot_type.value}, occupied={self.occupied}, floor={self.floor_number})"
+        state = "occupied" if self.occupied else "free"
+        return f"{self.id} [{self.slot_type.value}, {state}]"

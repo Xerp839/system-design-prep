@@ -1,21 +1,45 @@
-from typing import Optional
+import threading
+from typing import Dict, Optional
+
 from domain.parking_slot import ParkingSlot
-from domain.vehicle import Vehicle
-from repository.slot_repository import SlotRepository
+from domain.vehicle import VehicleType
+from repository.floor_repository import FloorRepository
+
 
 class SlotService:
-    def __init__(self, slot_repository: SlotRepository):
-        self._slot_repository = slot_repository
+    """
+    Owns the allocation POLICY: which free slot we hand out.
 
-    def allocate_slot(self, vehicle_type: Vehicle.VehicleType) -> Optional[ParkingSlot]:
-        return self._slot_repository.allocate_slot(vehicle_type)
+    Today the policy is "lowest floor first, first free slot on it". Changing it to
+    nearest-to-exit or cheapest-floor touches this method only.
+    """
+
+    def __init__(self, floor_repository: FloorRepository):
+        self._floor_repository = floor_repository
+        # Find-then-occupy is two steps; without this, two gates can win the same slot.
+        # In a real DB this becomes UPDATE ... WHERE id=? AND occupied=false.
+        self._lock = threading.Lock()
+
+    def allocate_slot(self, vehicle_type: VehicleType) -> Optional[ParkingSlot]:
+        with self._lock:
+            for floor in sorted(
+                self._floor_repository.find_all(), key=lambda f: f.floor_number
+            ):
+                slot = floor.find_free_slot(vehicle_type)
+                if slot:
+                    slot.occupy()
+                    return slot
+            return None
 
     def release_slot(self, slot_id: str):
-        self._slot_repository.release_slot(slot_id)
+        with self._lock:
+            slot = self._floor_repository.find_slot(slot_id)
+            if slot:
+                slot.release()
 
-    def create_slot(self, slot_type: Vehicle.VehicleType, floor_number: int) -> ParkingSlot:
-        slot = ParkingSlot(slot_type, floor_number)
-        return self._slot_repository.save(slot)
-
-    def get_available_slot_count(self, vehicle_type: Vehicle.VehicleType) -> int:
-        return len(self._slot_repository.find_available_slots(vehicle_type))
+    def availability(self, vehicle_type: VehicleType) -> Dict[int, int]:
+        """Free slots per floor - what an entrance display board would show."""
+        return {
+            f.floor_number: f.available_count(vehicle_type)
+            for f in self._floor_repository.find_all()
+        }
