@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict
-from ..domain.floor import Floor
+from domain.floor import Floor
 
 class FloorRepository:
     def __init__(self):

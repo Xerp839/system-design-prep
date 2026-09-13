@@ -1,8 +1,7 @@
 import sys
-import os
 
-# Add the project root to sys.path to allow absolute imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Windows consoles default to cp1252, which cannot encode the emoji used below.
+sys.stdout.reconfigure(encoding="utf-8")
 
 from domain.vehicle import Vehicle
 from repository.floor_repository import FloorRepository
@@ -11,7 +10,6 @@ from repository.ticket_repository import TicketRepository
 from repository.payment_repository import PaymentRepository
 from repository.pricing_rule_repository import PricingRuleRepository
 from service.admin_service import AdminService
-from service.payment_service import Payment_Service # Re-checking class name
 from service.payment_service import PaymentService
 from service.pricing_service import PricingService
 from service.receipt_service import ReceiptService

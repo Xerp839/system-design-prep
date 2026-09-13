@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict
-from ..domain.payment import Payment
+from domain.payment import Payment
 
 class PaymentRepository:
     def __init__(self):

@@ -1,5 +1,5 @@
-from ..domain.receipt import Receipt
-from ..domain.ticket import Ticket
+from domain.receipt import Receipt
+from domain.ticket import Ticket
 
 class ReceiptService:
     def __init__(self):

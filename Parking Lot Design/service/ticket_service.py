@@ -1,7 +1,7 @@
 from typing import Optional
-from ..domain.ticket import Ticket
-from ..domain.vehicle import Vehicle
-from ..repository.ticket_repository import TicketRepository
+from domain.ticket import Ticket
+from domain.vehicle import Vehicle
+from repository.ticket_repository import TicketRepository
 
 class TicketService:
     def __init__(self, ticket_repository: TicketRepository):
@@ -15,7 +15,4 @@ class TicketService:
         return self._ticket_repository.find_by_id(ticket_id)
 
     def deactivate_ticket(self, ticket_id: str):
-        self._ticket_repository.de_activate_ticket(ticket_id) # Consistent with Java bug (deActivateTicket vs deactivateTicket)
-        # Actually Java had deactivateTicket, but I'll stick to correct naming in Python.
-        # Wait, Java original had deactivateTicket.
         self._ticket_repository.deactivate_ticket(ticket_id)

@@ -8,28 +8,62 @@ ImportError: attempted relative import beyond top-level package
 
 That's not a criticism of you — you copied it, and the original was Java. But fixing this
 is the single best exercise available to you right now, because every bug is a *specific*
-lesson. Work top to bottom; don't read my fix until you've tried.
+lesson.
+
+> **Status: Part A is now fixed and the code runs.** Run it with:
+> ```
+> cd "Parking Lot Design" && python main.py
+> ```
+> Part B is still open — that's your exercise.
 
 ---
 
-## Part A — Bugs that stop it running (fix these first)
+## Part A — Bugs that stopped it running (fixed)
 
-### A1. Relative imports vs. how you run it — `main/main.py`
+### A1. Relative imports vs. how you run it
 
-Every module uses package-relative imports (`from ..domain.floor import Floor`), but
-`main.py` does `sys.path.append(...)` and then uses absolute ones (`from domain.floor import Floor`).
-Those two styles can't coexist, and `Parking Lot Design` has a space in its name so it isn't
-an importable package name anyway.
+Every module used package-relative imports (`from ..domain.floor import Floor`), but
+`main/main.py` did `sys.path.append(...)` and then used absolute ones
+(`from domain.floor import Floor`). Those two styles can't coexist: `..` means "go up one
+package," and when `main.py` is the entry point there is no package above it —
+hence `ImportError: attempted relative import beyond top-level package`.
 
-**Fix:** rename the directory to `parking_lot` (no space), delete the `sys.path` hack, put
-`main.py` at the package root next to `domain/`, make all imports relative (`from .domain...`),
-and run it from `system-design-prep/` with:
+There were two valid ways out:
+
+| Option | How | Trade-off |
+| :--- | :--- | :--- |
+| **Package** | rename the folder to `parking_lot` (no spaces), keep `..` imports, run `python -m parking_lot.main` | "correct" Python, but breaks your `N.Topic Name` folder convention |
+| **Script folder** ← *chosen* | move `main.py` to the folder root, convert `from ..x` → `from x`, drop the `sys.path` hack | keeps your folder names, runs with plain `python main.py` |
+
+**What I did:** moved `main/main.py` → `main.py` (at the folder root, next to `domain/`),
+deleted the `sys.path` hack, and rewrote all 41 `from ..x` imports as `from x`. Because
+`main.py` now sits at the root, Python puts that directory on `sys.path` automatically —
+so `from domain.vehicle import Vehicle` just resolves, with no path manipulation at all.
+
+Note the single-dot imports *inside* a folder (`from .vehicle import Vehicle` in
+`domain/floor.py`) were always fine and were left alone — same-package relative imports work
+either way.
+
+*Lesson: decide "is this an importable package or a script folder" before you write the
+first import, because the two styles need different import syntax and different run commands.*
+
+### A1b. Windows console encoding (a bonus one, not in the original Java)
+
+Once the imports were fixed, it still crashed:
 
 ```
-python -m parking_lot.main
+UnicodeEncodeError: 'charmap' codec can't encode character '✅'
 ```
 
-*Lesson: decide "is this a package or a script folder" before you write the first import.*
+`main.py` prints ✅ and 📄, but Windows consoles default to cp1252, which has no such
+characters. Nothing to do with the Java port — you'd hit this with any emoji.
+
+**Fix:** two lines at the top of `main.py`:
+
+```python
+import sys
+sys.stdout.reconfigure(encoding="utf-8")
+```
 
 ### A2. `reciept.py` vs `receipt.py` — file name typo
 
@@ -64,10 +98,41 @@ from service.payment_service import PaymentService
 
 ### A5. `ReceiptService` import path
 
-`service/reciept_service.py` imports `..domain.receipt` — fixed by A2, but check it after
-renaming.
+`service/reciept_service.py` imported `..domain.receipt` — the *correct* spelling of a file
+that was misspelled. Fixed as a side effect of A2 + A1.
 
-> After A1–A5, it runs. **Do that much before reading Part B.**
+> **All of Part A is fixed.** The entry and exit flows now run end to end.
+
+### What the working output immediately proves
+
+Run it and look at the receipt it prints:
+
+```
+✅ Exit successful - Fee: $20.00
+📄 Receipt:
+Entry Time: 2026-09-13 18:26:17.746427
+Exit Time:  2026-09-13 18:26:17.746427
+Payment Status: PENDING          <-- ???
+```
+
+The exit *succeeded* and the payment *was taken*, but the printed receipt says `PENDING`.
+That's bug **B6** visible on screen: `generate_receipt_text` builds a brand-new second
+receipt instead of looking up the one that was paid. A working program showing you a wrong
+answer is much better teaching material than a stack trace — this is why "make it run first"
+is the right order.
+
+I also confirmed the retry path works by forcing Razorpay to fail:
+
+```
+[SERVICE] Payment attempt 1 of 3   -> RazorpayAdapter FAILED
+[SERVICE] Switching to Stripe gateway for retry
+[SERVICE] Payment attempt 2 of 3   -> StripeAdapter FAILED
+[SERVICE] Payment attempt 3 of 3   -> StripeAdapter FAILED
+retry result: False | gateway now: StripeAdapter    <-- B2, permanently switched
+```
+
+That last line is bug **B2** proven: the service never goes back to Razorpay for the next
+customer.
 
 ---
 
@@ -245,7 +310,8 @@ but interviewers read it as "ported without understanding."
 
 ## Your exercise
 
-1. Fix A1–A5. Get it running. (~20 minutes)
+1. ~~Fix A1–A5. Get it running.~~ **Done — the code runs.** Read the diff so you see
+   what changed and why (`git diff HEAD` in the repo).
 2. Fix B1, B2, B5, B6. (~40 minutes) — these four are the ones an interviewer would find.
 3. Fix B4 with a lock, and write a comment explaining the DB equivalent.
 4. Then delete the whole folder and rebuild it from `02-build-order.md` without looking.

@@ -1,7 +1,7 @@
 from typing import NamedTuple, Optional
-from ..service.slot_service import SlotService
-from ..service.ticket_service import TicketService
-from ..domain.vehicle import Vehicle
+from service.slot_service import SlotService
+from service.ticket_service import TicketService
+from domain.vehicle import Vehicle
 
 class EntryResult(NamedTuple):
     success: bool

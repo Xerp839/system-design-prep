@@ -1,7 +1,7 @@
 from typing import Optional
-from ..domain.parking_slot import ParkingSlot
-from ..domain.vehicle import Vehicle
-from ..repository.slot_repository import SlotRepository
+from domain.parking_slot import ParkingSlot
+from domain.vehicle import Vehicle
+from repository.slot_repository import SlotRepository
 
 class SlotService:
     def __init__(self, slot_repository: SlotRepository):

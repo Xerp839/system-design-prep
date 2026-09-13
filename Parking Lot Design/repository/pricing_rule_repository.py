@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict
-from ..domain.pricing_rule import PricingRule
-from ..domain.vehicle import Vehicle
+from domain.pricing_rule import PricingRule
+from domain.vehicle import Vehicle
 
 class PricingRuleRepository:
     def __init__(self):

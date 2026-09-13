@@ -1,7 +1,7 @@
 from datetime import datetime
-from ..domain.ticket import Ticket
-from ..domain.vehicle import Vehicle
-from ..repository.pricing_rule_repository import PricingRuleRepository
+from domain.ticket import Ticket
+from domain.vehicle import Vehicle
+from repository.pricing_rule_repository import PricingRuleRepository
 
 class PricingService:
     def __init__(self, pricing_rule_repository: PricingRuleRepository):

@@ -1,8 +1,8 @@
-from ..adapter.payment_gateway_adapter import PaymentGatewayAdapter
-from ..adapter.razorpay_adapter import RazorpayAdapter
-from ..adapter.stripe_adapter import StripeAdapter
-from ..domain.payment import Payment
-from ..repository.payment_repository import PaymentRepository
+from adapter.payment_gateway_adapter import PaymentGatewayAdapter
+from adapter.razorpay_adapter import RazorpayAdapter
+from adapter.stripe_adapter import StripeAdapter
+from domain.payment import Payment
+from repository.payment_repository import PaymentRepository
 
 class PaymentService:
     def __init__(self, payment_repository: PaymentRepository):

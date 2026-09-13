@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict
-from ..domain.parking_slot import ParkingSlot
-from ..domain.vehicle import Vehicle
+from domain.parking_slot import ParkingSlot
+from domain.vehicle import Vehicle
 
 class SlotRepository:
     def __init__(self):

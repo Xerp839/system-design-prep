@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict
-from ..domain.ticket import Ticket
+from domain.ticket import Ticket
 
 class TicketRepository:
     def __init__(self):

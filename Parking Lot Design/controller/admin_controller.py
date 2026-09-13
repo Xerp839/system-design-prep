@@ -1,6 +1,6 @@
-from ..service.admin_service import AdminService
-from ..domain.vehicle import Vehicle
-from ..domain.pricing_rule import PricingRule
+from service.admin_service import AdminService
+from domain.vehicle import Vehicle
+from domain.pricing_rule import PricingRule
 
 class AdminController:
     def __init__(self, admin_service: AdminService):

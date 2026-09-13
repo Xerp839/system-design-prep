@@ -1,9 +1,9 @@
 from typing import NamedTuple, Optional
-from ..service.payment_service import PaymentService
-from ..service.pricing_service import PricingService
-from ..service.receipt_service import ReceiptService
-from ..service.slot_service import SlotService
-from ..service.ticket_service import TicketService
+from service.payment_service import PaymentService
+from service.pricing_service import PricingService
+from service.receipt_service import ReceiptService
+from service.slot_service import SlotService
+from service.ticket_service import TicketService
 
 class ExitResult(NamedTuple):
     success: bool

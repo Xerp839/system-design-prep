@@ -1,10 +1,10 @@
-from ..domain.floor import Floor
-from ..domain.parking_slot import ParkingSlot
-from ..domain.pricing_rule import PricingRule
-from ..domain.vehicle import Vehicle
-from ..repository.floor_repository import FloorRepository
-from ..repository.slot_repository import SlotRepository
-from ..repository.pricing_rule_repository import PricingRuleRepository
+from domain.floor import Floor
+from domain.parking_slot import ParkingSlot
+from domain.pricing_rule import PricingRule
+from domain.vehicle import Vehicle
+from repository.floor_repository import FloorRepository
+from repository.slot_repository import SlotRepository
+from repository.pricing_rule_repository import PricingRuleRepository
 
 class AdminService:
     def __init__(self, floor_repository: FloorRepository, slot_repository: SlotRepository, pricing_rule_repository: PricingRuleRepository):
