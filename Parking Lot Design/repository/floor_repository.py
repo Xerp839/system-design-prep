@@ -1,34 +1,31 @@
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
+
 from domain.floor import Floor
+from domain.parking_slot import ParkingSlot
+
 
 class FloorRepository:
+    """
+    Stores floors. Slots live inside their floor - there is exactly one copy of
+    each slot - but we keep an id -> slot index so releasing at exit is O(1)
+    instead of a walk over every floor.
+    """
+
     def __init__(self):
-        self._floors: Dict[str, Floor] = {}
-        self._floor_number_to_id: Dict[int, str] = {}
+        self._floors: List[Floor] = []
+        self._slots_by_id: Dict[str, ParkingSlot] = {}
 
     def save(self, floor: Floor) -> Floor:
-        self._floors[floor.id] = floor
-        self._floor_number_to_id[floor.floor_number] = floor.id
+        self._floors.append(floor)
+        self.index_slots(floor)
         return floor
 
-    def find_by_id(self, floor_id: str) -> Optional[Floor]:
-        return self._floors.get(floor_id)
-
-    def find_by_number(self, floor_number: int) -> Optional[Floor]:
-        floor_id = self._floor_number_to_id.get(floor_number)
-        return self._floors.get(floor_id) if floor_id else None
+    def index_slots(self, floor: Floor):
+        for slot in floor.slots:
+            self._slots_by_id[slot.id] = slot
 
     def find_all(self) -> List[Floor]:
-        return list(self._floors.values())
+        return list(self._floors)
 
-    def exists_by_number(self, floor_number: int) -> bool:
-        return floor_number in self._floor_number_to_id
-
-    def delete(self, floor_id: str):
-        floor = self._floors.pop(floor_id, None)
-        if floor:
-            self._floor_number_to_id.pop(floor.floor_number, None)
-
-    def clear(self):
-        self._floors.clear()
-        self._floor_number_to_id.clear()
+    def find_slot(self, slot_id: str) -> Optional[ParkingSlot]:
+        return self._slots_by_id.get(slot_id)

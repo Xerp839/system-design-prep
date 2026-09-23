@@ -1,35 +1,35 @@
-from adapter.payment_gateway_adapter import PaymentGatewayAdapter
-from adapter.razorpay_adapter import RazorpayAdapter
-from adapter.stripe_adapter import StripeAdapter
-from domain.payment import Payment
+from typing import List, Tuple
+
+from adapter.payment_gateway import PaymentGatewayAdapter
+from domain.payment import Payment, PaymentGateway
 from repository.payment_repository import PaymentRepository
 
+
 class PaymentService:
-    def __init__(self, payment_repository: PaymentRepository):
+    """
+    Tries each gateway in turn. Every attempt is saved, failures included, so the
+    payment history explains what happened.
+
+    The chosen gateway is a LOCAL, never stored on self - otherwise one customer's
+    failure would permanently switch the gateway for every customer after them.
+    """
+
+    def __init__(
+        self,
+        payment_repository: PaymentRepository,
+        gateways: List[Tuple[PaymentGateway, PaymentGatewayAdapter]],
+    ):
         self._payment_repository = payment_repository
-        self._default_gateway = RazorpayAdapter()
-        print("[SERVICE] PaymentService initialized with default gateway: Razorpay")
+        self._gateways = gateways
 
-    def process_payment(self, ticket_id: str, amount: float) -> bool:
-        print(f"[SERVICE] Processing payment for ticket: {ticket_id} amount: {amount}")
-        payment = Payment(ticket_id, amount, Payment.PaymentGateway.RAZORPAY)
-        self._payment_repository.save(payment)
-        
-        success = self._default_gateway.pay(ticket_id, amount)
-        if success:
-            payment.mark_as_success()
-        else:
-            payment.mark_as_failed()
-        
-        self._payment_repository.update(payment)
-        return success
+    def process_payment(self, ticket_id: str, amount: float, max_attempts: int = 3) -> bool:
+        for attempt in range(max_attempts):
+            # Stay on the last gateway once we have run out of alternatives.
+            gateway, adapter = self._gateways[min(attempt, len(self._gateways) - 1)]
+            payment = self._payment_repository.save(Payment(ticket_id, amount, gateway))
 
-    def process_payment_with_retry(self, ticket_id: str, amount: float, max_retries: int) -> bool:
-        for i in range(1, max_retries + 1):
-            print(f"[SERVICE] Payment attempt {i} of {max_retries}")
-            if self.process_payment(ticket_id, amount):
+            if adapter.pay(ticket_id, amount):
+                payment.mark_success()
                 return True
-            if i == 1:
-                self._default_gateway = StripeAdapter()
-                print("[SERVICE] Switching to Stripe gateway for retry")
+            payment.mark_failed()
         return False

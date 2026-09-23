@@ -1,27 +1,26 @@
-import uuid
-from enum import Enum
+import itertools
 from datetime import datetime
+
+from .payment import PaymentStatus
+
 
 class Receipt:
     """
-    Receipt Domain Model
-    
-    Issued at vehicle exit after payment.
+    Issued only after a payment succeeds, so it is born SUCCESS.
+    There is no mark_as_paid step to forget.
     """
-    class PaymentStatus(Enum):
-        PENDING = "PENDING"
-        SUCCESS = "SUCCESS"
-        FAILED = "FAILED"
+
+    _counter = itertools.count(1)
 
     def __init__(self, ticket_id: str, total_fee: float):
-        self.id = str(uuid.uuid4())
+        self.id = f"R-{next(Receipt._counter)}"
         self.ticket_id = ticket_id
-        self.exit_time = datetime.now()
         self.total_fee = total_fee
-        self.payment_status = self.PaymentStatus.PENDING
-
-    def mark_as_paid(self):
-        self.payment_status = self.PaymentStatus.SUCCESS
+        self.exit_time = datetime.now()
+        self.payment_status = PaymentStatus.SUCCESS
 
     def __str__(self):
-        return f"Receipt(id={self.id}, ticket={self.ticket_id}, fee={self.total_fee}, status={self.payment_status.value})"
+        return (
+            f"{self.id} | ticket {self.ticket_id} | "
+            f"fee {self.total_fee:.2f} | {self.payment_status.value}"
+        )

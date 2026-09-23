@@ -5,11 +5,18 @@ not get you there. These reps do. Spread them over ~2 weeks, one rep per sitting
 
 ---
 
-## Rep 0 — Repair (1–2 sittings)
+## Rep 0 — Read the diff (1 sitting)
 
-Work through `04-broken-things.md`. Get `main.py` running, then fix B1, B2, B5, B6.
-You're not writing new design here, you're reading someone else's closely — which is a
-different and useful skill.
+```
+git diff main..feat/refactor-parking-lot -- "Parking Lot Design"
+```
+
+Go through it with `04-broken-things.md` open. For each change, say **why** out loud before
+reading my reason. You're not writing new design here, you're reading someone else's closely
+— a different and useful skill, and it's most of what code review is.
+
+Then run the tests and read them. `tests/test_flows.py` is the shortest description of what
+this system promises.
 
 ## Rep 1 — Ladders from memory (15 min, no code)
 
@@ -32,10 +39,10 @@ did you enum everything, and did you keep methods to single-entity one-liners.
 
 ## Rep 3 — Entry slice, blind (30 min, code)
 
-Same folder. `SlotRepository` → `TicketRepository` → `SlotService` → `TicketService` →
-`EntryController` → `main`. Hand-create three slots in `main`. **Run it.**
+Same folder. `FloorRepository` → `TicketRepository` → `SlotService` → `TicketService` →
+`EntryController` → `main`. Seed one floor with a few slots in `main`. **Run it.**
 
-Success = a printed ticket id.
+Success = a printed ticket id, plus per-floor availability that visibly drops by one.
 
 ## Rep 4 — Exit slice, blind (40 min, code)
 
@@ -55,6 +62,7 @@ Then score yourself honestly:
 - [ ] Did I talk through the payment-before-release ordering?
 - [ ] Did I name my trade-offs unprompted?
 - [ ] Did I finish with both flows executing?
+- [ ] Did I stay near ~400 lines, and say out loud what I was choosing not to build?
 
 Whichever box is unticked is the one thing to fix in the next rep. Don't fix everything at once.
 
@@ -76,10 +84,11 @@ Set a timer for 3 minutes per question. Answer out loud, naming the exact files 
 Model answers for 1, 2, 4, 5, 6, 7 are at the bottom of `02-build-order.md`.
 Numbers 3, 8, 9 and 10 are yours to work out — that's the point.
 
-Hint for 8: this is the **Observer pattern**, which you already built in
-`5.Observer Desgin Pattern/`. `SlotService` publishes a slot-state-changed event; the display
-board subscribes. Notice how the folder you already have is the answer — that's how the
-pattern folders are supposed to pay off.
+Hint for 8: `SlotService.availability()` already returns free slots per floor, so the *data*
+exists — the question is how the board learns it changed without polling. That's the
+**Observer pattern**, which you already built in `5.Observer Desgin Pattern/`: `SlotService`
+publishes a slot-changed event, the board subscribes. Notice that the folder you already have
+is the answer — that's how the pattern folders are supposed to pay off.
 
 ---
 

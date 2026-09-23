@@ -1,33 +1,35 @@
-import uuid
+import itertools
 from enum import Enum
 
-class Payment:
-    """
-    Payment Domain Model
-    
-    Represents a payment transaction for a parking ticket.
-    """
-    class PaymentGateway(Enum):
-        RAZORPAY = "RAZORPAY"
-        STRIPE = "STRIPE"
 
-    class PaymentStatus(Enum):
-        PENDING = "PENDING"
-        SUCCESS = "SUCCESS"
-        FAILED = "FAILED"
+class PaymentGateway(Enum):
+    RAZORPAY = "RAZORPAY"
+    STRIPE = "STRIPE"
+
+
+class PaymentStatus(Enum):
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
+class Payment:
+    """One attempt to take money. A retried exit produces several of these."""
+
+    _counter = itertools.count(1)
 
     def __init__(self, ticket_id: str, amount: float, gateway: PaymentGateway):
-        self.id = str(uuid.uuid4())
+        self.id = f"P-{next(Payment._counter)}"
         self.ticket_id = ticket_id
         self.amount = amount
         self.gateway = gateway
-        self.status = self.PaymentStatus.PENDING
+        self.status = PaymentStatus.PENDING
 
-    def mark_as_success(self):
-        self.status = self.PaymentStatus.SUCCESS
+    def mark_success(self):
+        self.status = PaymentStatus.SUCCESS
 
-    def mark_as_failed(self):
-        self.status = self.PaymentStatus.FAILED
+    def mark_failed(self):
+        self.status = PaymentStatus.FAILED
 
     def __str__(self):
-        return f"Payment(id={self.id}, ticket={self.ticket_id}, amount={self.amount}, status={self.status.value})"
+        return f"{self.id} [{self.gateway.value} {self.amount} {self.status.value}]"

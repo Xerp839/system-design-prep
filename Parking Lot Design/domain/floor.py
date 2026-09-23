@@ -1,27 +1,35 @@
-import uuid
-from typing import List
+from typing import List, Optional
+
 from .parking_slot import ParkingSlot
-from .vehicle import Vehicle
+from .vehicle import VehicleType
+
 
 class Floor:
-    """
-    Floor Domain Model
-    
-    Represents a floor in the parking lot containing multiple slots.
-    """
+    """A floor owns its slots. This is the single source of truth for slot state."""
+
     def __init__(self, floor_number: int):
-        self.id = str(uuid.uuid4())
         self.floor_number = floor_number
         self.slots: List[ParkingSlot] = []
 
-    def add_slot(self, slot: ParkingSlot):
-        self.slots.append(slot)
+    def add_slots(self, slot_type: VehicleType, count: int) -> List[ParkingSlot]:
+        created = []
+        for _ in range(count):
+            slot_id = f"S-F{self.floor_number}-{len(self.slots) + 1:03d}"
+            slot = ParkingSlot(slot_id, slot_type, self.floor_number)
+            self.slots.append(slot)
+            created.append(slot)
+        return created
 
-    def get_available_slots(self, vehicle_type: Vehicle.VehicleType) -> List[ParkingSlot]:
-        return [s for s in self.slots if s.slot_type == vehicle_type and not s.occupied]
+    def find_free_slot(self, vehicle_type: VehicleType) -> Optional[ParkingSlot]:
+        return next(
+            (s for s in self.slots if s.slot_type == vehicle_type and not s.occupied),
+            None,
+        )
 
-    def get_available_slots_count(self, vehicle_type: Vehicle.VehicleType) -> int:
-        return len(self.get_available_slots(vehicle_type))
+    def available_count(self, vehicle_type: VehicleType) -> int:
+        return sum(
+            1 for s in self.slots if s.slot_type == vehicle_type and not s.occupied
+        )
 
     def __str__(self):
-        return f"Floor(id={self.id}, number={self.floor_number}, total_slots={len(self.slots)})"
+        return f"Floor {self.floor_number} ({len(self.slots)} slots)"

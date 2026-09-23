@@ -1,319 +1,273 @@
-# 04 — What's Broken in the Copied Code
+# 04 — What Was Broken, and What Changed
 
-I ran `Parking Lot Design/main/main.py`. **It does not execute.** First failure:
+Two rounds of work happened to the code you copied:
 
-```
-ImportError: attempted relative import beyond top-level package
-```
+1. **Round 1 — make it run.** It didn't execute at all (5 breakages from the Java port).
+2. **Round 2 — make it interview-sized.** 597 lines was roughly 2x what you can hand-write
+   in 45 minutes, and one of its abstractions was decorative.
 
-That's not a criticism of you — you copied it, and the original was Java. But fixing this
-is the single best exercise available to you right now, because every bug is a *specific*
-lesson.
+Both are done. The original is preserved in git history on `main`; this branch
+(`feat/refactor-parking-lot`) has the version you should learn from.
 
-> **Status: Part A is now fixed and the code runs.** Run it with:
-> ```
-> cd "Parking Lot Design" && python main.py
-> ```
-> Part B is still open — that's your exercise.
+This file is the record of *why* each change was made. The reasoning transfers to every
+other LLD problem — the specific bugs don't.
 
 ---
 
-## Part A — Bugs that stopped it running (fixed)
+## Round 1 — five reasons it wouldn't run
 
 ### A1. Relative imports vs. how you run it
 
-Every module used package-relative imports (`from ..domain.floor import Floor`), but
-`main/main.py` did `sys.path.append(...)` and then used absolute ones
-(`from domain.floor import Floor`). Those two styles can't coexist: `..` means "go up one
-package," and when `main.py` is the entry point there is no package above it —
-hence `ImportError: attempted relative import beyond top-level package`.
+Every module used `from ..domain.floor import Floor`, but `main/main.py` did a
+`sys.path.append(...)` and then used absolute imports. Those two styles can't coexist: `..`
+means "go up one package," and when `main.py` is the entry point there is no package above
+it — hence `ImportError: attempted relative import beyond top-level package`.
 
-There were two valid ways out:
+**Fixed by:** moving `main.py` to the folder root next to `domain/`, deleting the `sys.path`
+hack, and rewriting all 41 `from ..x` imports as `from x`. Because `main.py` now sits at the
+root, Python puts that directory on `sys.path` automatically and everything resolves with no
+path manipulation. Single-dot imports *inside* a folder (`from .vehicle import VehicleType`)
+were always fine and were left alone.
 
-| Option | How | Trade-off |
-| :--- | :--- | :--- |
-| **Package** | rename the folder to `parking_lot` (no spaces), keep `..` imports, run `python -m parking_lot.main` | "correct" Python, but breaks your `N.Topic Name` folder convention |
-| **Script folder** ← *chosen* | move `main.py` to the folder root, convert `from ..x` → `from x`, drop the `sys.path` hack | keeps your folder names, runs with plain `python main.py` |
+*Lesson: decide "importable package or script folder" before the first import — the two need
+different syntax and different run commands.*
 
-**What I did:** moved `main/main.py` → `main.py` (at the folder root, next to `domain/`),
-deleted the `sys.path` hack, and rewrote all 41 `from ..x` imports as `from x`. Because
-`main.py` now sits at the root, Python puts that directory on `sys.path` automatically —
-so `from domain.vehicle import Vehicle` just resolves, with no path manipulation at all.
+### A2. `reciept.py` vs `receipt.py`
 
-Note the single-dot imports *inside* a folder (`from .vehicle import Vehicle` in
-`domain/floor.py`) were always fine and were left alone — same-package relative imports work
-either way.
+`domain/reciept.py` defined `Receipt`, while two other files imported `domain/receipt.py`.
+Renamed both it and `reciept_service.py`.
 
-*Lesson: decide "is this an importable package or a script folder" before you write the
-first import, because the two styles need different import syntax and different run commands.*
-
-### A1b. Windows console encoding (a bonus one, not in the original Java)
-
-Once the imports were fixed, it still crashed:
-
-```
-UnicodeEncodeError: 'charmap' codec can't encode character '✅'
-```
-
-`main.py` prints ✅ and 📄, but Windows consoles default to cp1252, which has no such
-characters. Nothing to do with the Java port — you'd hit this with any emoji.
-
-**Fix:** two lines at the top of `main.py`:
+### A3. A call to a method that doesn't exist
 
 ```python
-import sys
-sys.stdout.reconfigure(encoding="utf-8")
-```
-
-### A2. `reciept.py` vs `receipt.py` — file name typo
-
-- `domain/reciept.py` defines `Receipt`
-- `service/reciept_service.py` does `from ..domain.receipt import Receipt` → no such module
-- `controller/exit_controller.py` does `from ..service.receipt_service import ReceiptService` → no such module
-- `main.py` does `from service.receipt_service import ReceiptService` → no such module
-
-**Fix:** rename both files to `receipt.py` and `receipt_service.py`.
-
-### A3. `TicketService.deactivate_ticket` calls a method that doesn't exist
-
-```python
-def deactivate_ticket(self, ticket_id: str):
-    self._ticket_repository.de_activate_ticket(ticket_id)  # AttributeError
-    # ... two confused comments ...
+def deactivate_ticket(self, ticket_id):
+    self._ticket_repository.de_activate_ticket(ticket_id)   # AttributeError
+    # Actually Java had deactivateTicket, but I'll stick to correct naming in Python.
+    # Wait, Java original had deactivateTicket.
     self._ticket_repository.deactivate_ticket(ticket_id)
 ```
 
-The author was mid-thought about Java naming and left both lines in. The first one raises.
+Someone was mid-thought about Java naming and left both lines plus their thinking-out-loud in.
 
-**Fix:** delete the first call and both comments. One line survives.
-
-### A4. `main.py` imports a class that doesn't exist
+### A4. An import of a class that doesn't exist
 
 ```python
 from service.payment_service import Payment_Service # Re-checking class name
-from service.payment_service import PaymentService
 ```
 
-**Fix:** delete the first line.
+Same story.
 
-### A5. `ReceiptService` import path
+### A1b. Windows console encoding (not a port bug)
 
-`service/reciept_service.py` imported `..domain.receipt` — the *correct* spelling of a file
-that was misspelled. Fixed as a side effect of A2 + A1.
-
-> **All of Part A is fixed.** The entry and exit flows now run end to end.
-
-### What the working output immediately proves
-
-Run it and look at the receipt it prints:
-
-```
-✅ Exit successful - Fee: $20.00
-📄 Receipt:
-Entry Time: 2026-09-13 18:26:17.746427
-Exit Time:  2026-09-13 18:26:17.746427
-Payment Status: PENDING          <-- ???
-```
-
-The exit *succeeded* and the payment *was taken*, but the printed receipt says `PENDING`.
-That's bug **B6** visible on screen: `generate_receipt_text` builds a brand-new second
-receipt instead of looking up the one that was paid. A working program showing you a wrong
-answer is much better teaching material than a stack trace — this is why "make it run first"
-is the right order.
-
-I also confirmed the retry path works by forcing Razorpay to fail:
-
-```
-[SERVICE] Payment attempt 1 of 3   -> RazorpayAdapter FAILED
-[SERVICE] Switching to Stripe gateway for retry
-[SERVICE] Payment attempt 2 of 3   -> StripeAdapter FAILED
-[SERVICE] Payment attempt 3 of 3   -> StripeAdapter FAILED
-retry result: False | gateway now: StripeAdapter    <-- B2, permanently switched
-```
-
-That last line is bug **B2** proven: the service never goes back to Razorpay for the next
-customer.
+Once imports were fixed it still crashed: `UnicodeEncodeError` on the ✅ emoji, because
+Windows consoles default to cp1252. Fixed with
+`sys.stdout.reconfigure(encoding="utf-8")` in `main.py`.
 
 ---
 
-## Part B — Real design bugs (these are the interesting ones)
+## Round 2 — why it was too big, and what went
 
-### B1. `PricingService` hardcodes CAR — every vehicle is billed as a car
+Measured before: **597 lines, 74 methods, 18 never called from outside their own file.**
+After: **421 lines, 34 methods, effectively nothing unused.**
 
-```python
-def calculate_fee(self, ticket):
-    vehicle_type = Vehicle.VehicleType.CAR  # Default demo type
-```
+### The admin layer — deleted, 108 lines
 
-A bike parked for an hour is billed at the car rate. This is *the* design flaw, and it's a
-symptom of something structural: `Ticket` stores `vehicle_id`, but **there is no
-`VehicleRepository`**, so there is genuinely no way to resolve that id back to a vehicle.
-The `Vehicle` object created in `EntryController` is constructed, used for its `id`, and
-then thrown away — it is never persisted anywhere.
-
-Two legitimate fixes, and **you should be able to argue for both**:
-
-**Fix 1 — add the missing repository (the "normalised" answer).**
-Create `VehicleRepository`, save the vehicle in the entry flow, then:
-```python
-vehicle = self._vehicle_repository.find_by_id(ticket.vehicle_id)
-rule = self._pricing_rule_repository.find_by_vehicle_type(vehicle.vehicle_type)
-```
-Correct, and you now have a place to index by license plate — which you need for the
-lost-ticket case anyway.
-
-**Fix 2 — denormalise onto the ticket (the "pragmatic" answer).**
-Add `vehicle_type` to `Ticket` at creation. One field, no extra lookup, and it's arguably
-*more* correct: the ticket should record what was actually billed at entry time, frozen,
-even if the vehicle record is edited later.
-
-*Lesson: when you replace an object reference with an id, you owe yourself either a
-repository to resolve it or a denormalised copy of the field you need. Pick one, deliberately.*
-
-### B2. `PaymentService` permanently switches to Stripe and never switches back
+`AdminService` + `AdminController` + a third repository existed to create three floors and
+set four prices. In `main.py` that is now:
 
 ```python
-def process_payment_with_retry(self, ticket_id, amount, max_retries):
-    for i in range(1, max_retries + 1):
-        if self.process_payment(ticket_id, amount): return True
-        if i == 1:
-            self._default_gateway = StripeAdapter()   # mutates the SERVICE
+LAYOUT = {0: [(VehicleType.BIKE, 10), (VehicleType.CAR, 15), (VehicleType.TRUCK, 3)],
+          1: [(VehicleType.CAR, 20), (VehicleType.EV, 5)]}
 ```
 
-`_default_gateway` is instance state on a long-lived service. One customer's failed payment
-permanently flips the gateway for **every future customer**. There's a second bug stacked on
-it: `process_payment` always records `Payment.PaymentGateway.RAZORPAY` on the Payment row,
-so after the switch your audit trail lies about which gateway was used.
+Admin is CRUD. CRUD demonstrates nothing about design ability, and 108 lines is a quarter of
+your time budget. In an interview you *describe* it. See Pass 7 in `02-build-order.md`.
 
-**Fix:** make the gateway a local variable, and pass it down:
+### `Floor` was decorative — the worst problem
+
+The measurement that found it: `floor.slots` was touched in exactly two places, both inside
+`floor.py` itself. `AdminService` filled every floor with slots and **nothing ever read
+them.** Allocation went through a separate `SlotRepository` holding its own flat dict of all
+slots, scanning it floor-blind:
 
 ```python
-def __init__(self, payment_repository, gateways=None):
-    self._payment_repository = payment_repository
-    self._gateways = gateways or [
-        (Payment.PaymentGateway.RAZORPAY, RazorpayAdapter()),
-        (Payment.PaymentGateway.STRIPE,   StripeAdapter()),
-    ]
-
-def process_payment_with_retry(self, ticket_id, amount, max_retries):
-    for attempt in range(max_retries):
-        gateway_enum, adapter = self._gateways[min(attempt, len(self._gateways) - 1)]
-        if self._process_once(ticket_id, amount, gateway_enum, adapter):
-            return True
-    return False
+for slot in self._slots.values():   # no floor awareness at all
 ```
 
-*Lesson: mutable state on a shared service is how one request poisons the next. Prefer
-locals, or pass the choice in.*
+Two containers holding the same objects, one of them write-only. Not a correctness bug — same
+object references, so `occupied` flips were visible in both — but fatal for an interview. Ask
+"how do you assign a slot near the entrance?" or "show availability per floor" and the `Floor`
+class can't help. That reads as template-copied rather than designed.
 
-### B3. The slot leaks if anything after allocation fails
+**Fixed by deleting `SlotRepository` entirely.** Slots now live only inside their floor;
+`FloorRepository` keeps an `id -> slot` **index** (same objects, not a copy) so release is
+O(1). `SlotService` walks floors in order. `main.py` prints per-floor availability before and
+after each entry, so you can *see* it working.
+
+### Allocation policy moved out of the repository
+
+`SlotRepository.allocate_slot()` found a free slot **and mutated it**. Which slot to hand out
+is a *policy* decision, and policy in the storage layer is the wrong seam. It's now
+`SlotService.allocate_slot`, where changing to nearest-to-exit or cheapest-floor touches one
+method.
+
+### Dead methods — deleted
+
+`SlotService.create_slot`, `SlotService.get_available_slot_count`,
+`TicketRepository.find_active_tickets`, `delete()` on three repositories, four
+`AdminController` methods, `Floor.get_available_slots_count`. Speculative CRUD written
+because "a repository should have those," not because anything needed them.
+
+Every method you keep is a method you have to remember.
+
+---
+
+## Round 2 — the design bugs, and how each was fixed
+
+### B1. Every vehicle was billed as a car
 
 ```python
-slot = self._slot_service.allocate_slot(vehicle_type)   # slot is now occupied=True
-vehicle = Vehicle(license_plate, vehicle_type)
-ticket = self._ticket_service.generate_ticket(vehicle, slot.id)   # if this throws...
+vehicle_type = Vehicle.VehicleType.CAR  # Default demo type
 ```
 
-If ticket creation fails, the slot stays occupied forever and no ticket exists to release it.
+A bike parked an hour was charged the car rate. This was a *symptom*: `Ticket` stored
+`vehicle_id`, there was **no `VehicleRepository`**, and the `Vehicle` built in
+`EntryController` was used for its id and thrown away. The code genuinely could not find out
+what kind of vehicle it was.
 
-**Fix:** wrap in try/except and release the slot on failure — a compensating action. In a
-real system: one database transaction.
+**Fixed by denormalising:** `Ticket` now carries `vehicle_type` directly, and `Vehicle` lost
+its UUID in favour of the license plate as natural key — so no `VehicleRepository` is needed
+at all. This is also the *more correct* model: a ticket records what was agreed at entry, and
+editing a vehicle record later must not change an in-flight charge.
 
-*Lesson: any time you mutate shared state and then do more work, ask "what if the rest fails?"*
+> **The transferable rule:** when you replace an object reference with an id, you owe yourself
+> either a repository to resolve it, or a copy of the field you need. Pick one deliberately.
+> The bug is picking neither.
 
-### B4. Slot allocation is not atomic
+Guarded by `test_each_vehicle_type_is_priced_by_its_own_rule`.
+
+### B2. One customer's failed card switched the gateway for everyone
 
 ```python
-for slot in self._slots.values():
-    if slot.slot_type == vehicle_type and not slot.occupied:
-        slot.occupied = True
+if i == 1:
+    self._default_gateway = StripeAdapter()   # mutates the SERVICE
 ```
 
-Read-then-write. Two gates, two threads, one free slot, both cars get it.
+`_default_gateway` was instance state on a long-lived service, so it never went back to
+Razorpay. Worse, `process_payment` always recorded `RAZORPAY` on the `Payment` row, so after
+the switch the audit trail lied.
 
-**Fix (in-memory):** a `threading.Lock` around allocate/release.
-**Fix (real DB):** `UPDATE slots SET occupied=true WHERE id=? AND occupied=false` and check
-rows-affected — let the database do the compare-and-swap.
+I proved it before fixing — forcing Razorpay to fail left the service on
+`gateway now: StripeAdapter` permanently.
 
-*This is the #1 follow-up question in a parking-lot interview. Raise it before they do.*
-
-### B5. Receipt is marked paid, but never saved
+**Fixed by** injecting a `[(enum, adapter)]` list and choosing per attempt as a **local**:
 
 ```python
-receipt = self._receipt_service.generate_receipt(ticket, fee)
-self._receipt_service.mark_receipt_as_paid(receipt)
+gateway, adapter = self._gateways[min(attempt, len(self._gateways) - 1)]
+payment = self._payment_repository.save(Payment(ticket_id, amount, gateway))
 ```
 
-There is no `ReceiptRepository`. The receipt object exists for the length of the function
-and is garbage-collected. `ExitResult` returns a `receipt_id` that can never be looked up.
+Each row now records the gateway actually used. Guarded by
+`test_payment_falls_back_to_the_second_gateway`, which asserts both the statuses and the
+gateways in order.
 
-**Fix:** add `ReceiptRepository` and save it.
+*Lesson: mutable state on a shared service is how one request poisons the next.*
 
-### B6. `generate_receipt_text` silently creates a *second* receipt
+### B3. The slot leaked if anything after allocation failed
+
+The slot was occupied before the ticket was created; if that threw, nothing could ever free
+it. **Fixed** with a compensating action in `EntryController`:
 
 ```python
-def generate_receipt_text(self, ticket_id):
-    fee = self._pricing_service.calculate_fee(ticket)   # recomputed — later time, LARGER fee
-    receipt = self._receipt_service.generate_receipt(ticket, fee)  # a brand new receipt!
+except Exception:
+    self._slot_service.release_slot(slot.id)
+    raise
 ```
 
-`main.py` calls this right after `exit_vehicle`, so the printed receipt has a **different id,
-a different exit time, and possibly a different fee** than the one that was actually paid.
+*Lesson: every time you mutate shared state, ask "what if the next line fails?"*
 
-**Fix:** once B5 exists, look the receipt up by id instead of regenerating it. Never
-recompute a price you've already charged.
+### B4. Slot allocation was not atomic
 
-### B7. Fee arithmetic: `//` truncates, and money is a float
+Read-then-write: two gates, one free slot, both cars win. **Fixed** with a `threading.Lock`
+in `SlotService`, plus a comment naming the real answer:
 
 ```python
-hours = max(1, duration.total_seconds() // 3600)
+# In a real DB this becomes UPDATE ... WHERE id=? AND occupied=false
 ```
 
-61 minutes bills as 1 hour. Real lots round *up*. And `float` for currency accumulates
-rounding error.
+**This is the #1 follow-up question in a parking-lot interview.** Raise it before they do.
 
-**Fix:** `hours = max(1, math.ceil(duration.total_seconds() / 3600))`, and store money as
-integer paise or `Decimal`.
+### B5 + B6. The receipt was never saved, and printing it made a second one
 
-### B8. Slot type is rigid — a car can't use a truck slot
+`generate_receipt_text` recomputed the fee (at a later time, so possibly *larger*) and built
+a brand-new `Receipt`. `main.py` called it right after `exit_vehicle`, so the printed receipt
+had a different id, a different exit time, and a `PENDING` status — for a payment that had
+already succeeded. That wrong output was visible on screen once the code ran.
 
-`slot_type == vehicle_type` exactly. Real lots allow a small vehicle in a larger slot.
-See the compatibility-map answer in `02-build-order.md`.
+**Fixed by** deleting `generate_receipt_text` (15 lines of string formatting, zero design
+content), adding a `ReceiptRepository`, and making `Receipt` **born `SUCCESS`** — it is only
+ever created after a payment succeeds, so there's no `mark_as_paid()` step to forget.
 
-### B9. `get_slot_statistics` counts *total* slots, not free ones
+*Lesson: never recompute a price you have already charged. And where it's cheap, make illegal
+states unrepresentable instead of relying on someone calling a setter.*
+
+### B7. Fee arithmetic
+
+`duration.total_seconds() // 3600` truncates — 61 minutes billed as one hour. **Fixed** to
+`math.ceil(...)`, which is what real car parks do.
+
+Money is still `float`. That's a deliberate, stated shortcut: `Decimal` arithmetic adds noise
+to a file meant for learning. Say "integer paise or `Decimal` in production" in the interview
+and it costs you nothing.
+
+`calculate_fee` also gained an injectable `now` parameter, which makes it pure and lets
+`test_flat_rate_caps_a_long_stay` price a ten-hour stay instantly. That's also your answer to
+the "system clock mismatch" edge case.
+
+### B10. Slot state had no owner
+
+`occupied` was public and flipped from several places. **Fixed** with guarded transitions:
 
 ```python
-def get_slot_statistics(self):
-    stats = {}
-    for slot in self._slots.values():
-        stats[slot.slot_type.value] = stats.get(slot.slot_type.value, 0) + 1
+def occupy(self):
+    if self.occupied:
+        raise ValueError(f"Slot {self.id} is already occupied")
+    self.occupied = True
 ```
 
-No `occupied` check, so "parking status" — the one thing an admin actually wants — always
-reports the same numbers. Should report free and total per type.
+A double-book is now a loud error instead of a silent overwrite. Guarded by
+`test_a_slot_cannot_be_double_booked`.
 
-### B10. `ParkingSlot.occupied` is public and mutated from three places
+### Also fixed, briefly
 
-`SlotRepository.allocate_slot`, `SlotRepository.release_slot`, and anything else that feels
-like it. There's no single owner of that transition.
+- **Duplicate `PaymentStatus`** — was declared in both `payment.py` and `receipt.py` as two
+  unrelated enums that could drift. Now declared once and imported.
+- **Nested enums** (`Vehicle.VehicleType`) → module-level `VehicleType`, the Python idiom.
+- **UUIDs** → `itertools.count` ids (`T-1`, `S-F0-011`, `R-1`), so demo output is legible.
+- **`_add_floor` / `add_floor_public`** pairs — Java access modifiers transliterated. Gone
+  with the admin layer.
 
-**Fix:** put `occupy()` / `release()` on `ParkingSlot`, have them raise if already in that
-state, and make everyone go through them. That's encapsulation doing real work — it turns
-a silent double-release into a loud error.
+---
 
-### B11. `AdminService._add_floor` / `add_floor_public`
+## Still open, on purpose
 
-Java private/public transliterated. In Python, one public `add_floor` is enough. Cosmetic,
-but interviewers read it as "ported without understanding."
+Two things I did **not** fix, because they're better as talking points than as code:
+
+- **B8 — slot compatibility.** A car still can't use a truck slot. The fix is a compatibility
+  map in `SlotService.allocate_slot`, preferring the tightest fit. It's in the curveball list
+  in `02-build-order.md`.
+- **Pricing as Strategy.** Justified only once rules multiply (weekends, free first 30
+  minutes). Adding it now would be a pattern applied for its own sake — which is itself a red
+  flag. Say "if pricing grows, I'd move it to Strategy" instead.
 
 ---
 
 ## Your exercise
 
-1. ~~Fix A1–A5. Get it running.~~ **Done — the code runs.** Read the diff so you see
-   what changed and why (`git diff HEAD` in the repo).
-2. Fix B1, B2, B5, B6. (~40 minutes) — these four are the ones an interviewer would find.
-3. Fix B4 with a lock, and write a comment explaining the DB equivalent.
-4. Then delete the whole folder and rebuild it from `02-build-order.md` without looking.
+The repair work is done, so the exercise is now the one that actually matters:
 
-Step 4 is the one that matters. The first three are just how you earn the right to do it.
+1. Read `git diff main..feat/refactor-parking-lot -- "Parking Lot Design"` and make sure you
+   can explain **why** for each change, not just what.
+2. Then delete the folder and rebuild it from `02-build-order.md` without looking.
+
+Step 2 is the point. Step 1 is how you earn the right to do it.

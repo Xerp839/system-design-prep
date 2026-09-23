@@ -15,11 +15,15 @@ to say. LLD rounds are usually 45–60 minutes. Assume 45 and finish early.
 | 13–17 | Flow ladders → derive services + repos | numbered steps + signatures |
 | 17–25 | ENTRY slice, bottom to top | **running code** |
 | 25–35 | EXIT slice | **running code** |
-| 35–40 | Admin (or say you'd skip it) | CRUD, or a sentence |
+| 35–40 | Tests or a second demo case (double exit, full lot) | more running code |
 | 40–45 | Edge cases, concurrency, extensions | discussion |
 
-If you're behind at minute 25 with no running entry flow, **cut admin and cut the receipt
-text formatting** and say so. Delivering two working flows beats five half-flows every time.
+If you're behind at minute 25 with no running entry flow, **cut receipts to a plain return
+value and cut the gateway fallback** — one gateway, no retry — and say you're doing it.
+Delivering two working flows beats five half-flows every time.
+
+**Target size: ~400 lines.** If you're on track for much more, you're building something you
+cannot finish.
 
 ---
 
@@ -49,14 +53,21 @@ text formatting** and say so. Delivering two working flows beats five half-flows
 > "Order matters here: I take payment before releasing the slot. If payment fails I return
 > early and the slot stays occupied, because the car physically hasn't left."
 
+**Declining to build the admin layer (say this, don't skip it):**
+> "Admin is CRUD over the floor and pricing repositories. I've seeded that in `main` so I can
+> spend the time on the concurrency question instead — happy to sketch the CRUD if you'd
+> rather see it."
+
 **Naming your patterns — only where they earned their place:**
 > "Three patterns: Adapter for the payment gateways so adding PayPal is a new file rather
 > than an edit; Repository so the storage choice is a seam; and if pricing gets more rules
 > I'd move it to Strategy."
 
 **Admitting a shortcut (this scores, it doesn't cost):**
-> "`allocate_slot` is a linear scan — O(n). With ten thousand slots I'd keep a free-list
-> per floor and type for O(1). I kept the scan so the logic reads clearly."
+> "`allocate_slot` walks the floors — O(n) in slots. With ten thousand slots I'd keep a
+> free-list per floor and type for O(1). I kept the scan so the logic reads clearly."
+
+> "Money is a float here; production would be integer paise or `Decimal`."
 
 **Closing:**
 > "Both flows run. The things I'd do next, in order: make slot allocation atomic, move
@@ -68,8 +79,9 @@ text formatting** and say so. Delivering two working flows beats five half-flows
 
 - Starting to code at minute 0. **Never.** Ask questions first, always.
 - One `ParkingLot` god class with 20 methods.
-- Storing money as `float`. (Mention it: *"I'd use integer paise/cents or `Decimal` in
-  production — I'm using float here for speed."* The copied code uses float.)
+- Storing money as `float` **without flagging it**. Float is fine under time pressure; say
+  *"integer paise or `Decimal` in production"* and it costs you nothing.
+- Writing an admin/CRUD layer while the exit flow doesn't exist yet.
 - Patterns applied because you know their names. A Factory that makes one type of object
   is worse than no Factory. Only reach for one when a *changing requirement* motivates it.
 - Silence. Narrate. A design round grades your reasoning, not your typing.
@@ -91,20 +103,22 @@ text formatting** and say so. Delivering two working flows beats five half-flows
 If you can only draw one thing, draw this:
 
 ```
-              EntryController            ExitController            AdminController
-                    |                          |                          |
-        +-----------+                          |                    +-----+-----+
-        |           |            +-------+-----+-----+-------+      |           |
-   SlotService  TicketService   Pricing Payment  Receipt  Slot/Ticket        AdminService
-        |           |             |       |                                     |
-   SlotRepo    TicketRepo   PricingRuleRepo  PaymentRepo                  FloorRepo
-        |           |             |       |                                     |
-        +-----------+-------------+-------+-------------------------------------+
-                                  |
-                          domain: Vehicle, Floor, ParkingSlot,
-                                  Ticket, PricingRule, Payment, Receipt
+        EntryController                        ExitController
+              |                                      |
+      +-------+-------+          +--------+-------+--+-----+----------+
+      |               |          |        |       |        |          |
+ SlotService    TicketService  Pricing  Payment  Receipt  Slot     Ticket
+      |               |        Service  Service  Service  Service  Service
+      |               |          |        |       |
+  FloorRepo      TicketRepo  PricingRepo PayRepo ReceiptRepo
+      |               |          |        |       |
+      +---------------+----------+--------+-------+
+                              |
+                      domain: Vehicle, Floor, ParkingSlot,
+                              Ticket, PricingRule, Payment, Receipt
+                      (Floor owns its slots - one source of truth)
 
-                          PaymentService ---> PaymentGatewayAdapter (ABC)
+                      PaymentService ---> PaymentGatewayAdapter (ABC)
                                                  /            \
                                           Razorpay          Stripe
 ```
